@@ -1,11 +1,15 @@
+# Crack Subnautica 1 and Bellow Zero using dnSpy and x64dbg
 
-# Crack Subnautica 1 and Bellow Zero using dnSpy
+Using **x64dbg** attached to the game and using the file **Player.txt** in `AppData\LocalLow\Unknown Worlds\Subnautica` and `AppData\LocalLow\Unknown Worlds\SubnauticaZero` to view crash log.
+
+---
 ## Patch DLL `com.rlabrecque.steamworks.net.dll`
 
 Go to the Classe `InteropHelp` and clear `methodes`
 - **TestIfAvailableClient**
 - **TestIfAvailableGameServer**
 
+---
 ## Patch DLL `Assembly-CSharp.dll`
 
 Go to the Classe `PlatformUtils` and clear `methode`
@@ -22,7 +26,6 @@ and `property`
 - **IsBigPictureMode**
 
 ---
-
 ### `com.rlabrecque.steamworks.net.dll`
 
 **TestIfAvailableClient :**
@@ -44,7 +47,6 @@ public static void TestIfAvailableGameServer()
 Clears the Steamworks API server verification to prevent the game from stopping without a detected Steam connection.
 
 ---
-
 ### `Assembly-CSharp.dll`
 
 **PlatformInitAsync (Bellow Zero) :**
@@ -161,3 +163,5 @@ protected static bool get_IsBigPictureMode()
 }
 ```
 Disables Big Picture mode detection to prevent the game from calling the missing Steam DLL.
+
+
