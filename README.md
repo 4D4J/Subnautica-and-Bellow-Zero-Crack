@@ -1,108 +1,239 @@
-# Subnautica & Subnautica: Below Zero — Platform Integration Notes
+# Crack Subnautica 1 and Below Zero using dnSpy and x64dbg
 
-> **Educational and interoperability research only.**
->
-> This repository documents observations about platform-service integration, startup behavior, and fallback code paths in Subnautica and Subnautica: Below Zero. It is not an official patch, crack, or redistribution of modified game files.
->
-> Do not use this documentation to bypass licensing, DRM, or access controls. Use legitimate copies of the games and follow the applicable software licenses and terms of service.
+> **Technical documentation and research notes.** This README describes the platform and startup behavior observed while analyzing Subnautica and Subnautica: Below Zero. Always use legitimate copies of the games and respect the applicable licenses and terms of service.
 
 ## Overview
 
-Subnautica and Subnautica: Below Zero use platform services for parts of their startup flow, input handling, save storage, and optional Steam features. When those services are unavailable or incorrectly initialized, the game may fail to start or produce null-reference and input-related errors.
+This project documents the use of **x64dbg** and **dnSpy** to investigate startup and crash behavior in Subnautica and Subnautica: Below Zero.
 
-This project collects technical notes about those interactions, with a focus on:
+The crash logs can be found in the following directories:
 
-- Steamworks availability checks
-- Platform-service initialization
-- Input-device fallback behavior
-- Local save-storage behavior
-- Virtual keyboard support
-- Big Picture mode detection
+- `AppData\\LocalLow\\Unknown Worlds\\Subnautica`
+- `AppData\\LocalLow\\Unknown Worlds\\SubnauticaZero`
 
-## Games covered
+The main log file is generally named `Player.log`, although the exact files may vary depending on the game version.
 
-- **Subnautica**
-- **Subnautica: Below Zero**
+> **Important:** Make a backup of the original assemblies and save files before making any changes. Method names, signatures, and behavior may differ between game versions.
 
-Always verify the exact game build before comparing method names, signatures, or behavior. Game updates can change assemblies and invalidate earlier observations.
+---
 
-## Assemblies discussed
+## Assemblies covered
 
-The notes in this repository refer to the following assemblies:
+The notes below refer to these assemblies:
 
 - `com.rlabrecque.steamworks.net.dll`
 - `Assembly-CSharp.dll`
 
-The relevant code is located in platform and input-related classes, including:
+The relevant classes include:
 
 - `InteropHelp`
 - `PlatformUtils`
 - `GameInput`
 - `PlatformServicesSteam`
 
-## Technical summary
+---
 
-### Steamworks availability
+## Patch summary
 
-The Steamworks wrapper contains client and game-server availability checks. These methods determine whether the expected platform API is available and can affect startup behavior when the runtime environment is incomplete.
+The documented changes concern platform initialization, Steam availability checks, input initialization, local save storage, virtual keyboard support, and Big Picture mode detection.
 
-Methods observed in the analysis include:
+### `com.rlabrecque.steamworks.net.dll`
+
+In the `InteropHelp` class, the following methods were reviewed:
 
 - `TestIfAvailableClient`
 - `TestIfAvailableGameServer`
 
-### Platform initialization
+### `Assembly-CSharp.dll`
 
-`PlatformInitAsync` is responsible for selecting and initializing the platform-service implementation used by the game. The initialization path is important because later systems may assume that a valid service object has already been created.
+In the `PlatformUtils` class:
 
-When investigating startup failures, check:
+- `PlatformInitAsync`
 
-- Which platform implementation is selected
-- Whether initialization completes successfully
-- Whether the service object is null
-- Whether quit callbacks and input services are registered
+In the `GameInput` class:
 
-### Input-device selection
+- `GetPrimaryDevice`
 
-`GameInput.GetPrimaryDevice` and related properties can fail when the input subsystem has not finished initializing. A safe fallback device or a null check may be necessary during debugging, depending on the game version.
-
-### Steam presence and optional features
-
-`PlatformServicesSteam` contains checks and features related to Steam, including:
+In the `PlatformServicesSteam` class:
 
 - `IsPresent`
 - `InitializeAsync`
-- `GetSupportsVirtualKeyboard`
+- `GetSupportVirtualKeyboard`
 - `IsBigPictureMode`
 
-These methods should be treated as version-specific research targets rather than stable APIs. Their implementation and behavior may differ between Subnautica and Below Zero.
+---
 
-### Save storage
+## Detailed notes
 
-The game may use platform-backed storage or a local fallback path. When investigating save issues, check the effective save directory and confirm that the process has permission to read and write there.
+### `com.rlabrecque.steamworks.net.dll`
 
-Do not delete or overwrite save data while testing. Make a backup first.
+#### `TestIfAvailableClient`
 
-## Recommended investigation workflow
+```csharp
+public static void TestIfAvailableClient()
+{
 
-1. Record the exact game version and platform.
-2. Back up the original game files and save data.
-3. Capture the relevant log files before making changes.
-4. Compare the affected method with the matching assembly from the same game build.
-5. Change one behavior at a time in an isolated test environment.
-6. Verify startup, input, save loading, and quitting separately.
-7. Keep a record of the original and modified behavior.
-
-## Log locations
-
-The game logs can usually be found in locations similar to:
-
-```text
-%USERPROFILE%\AppData\LocalLow\Unknown Worlds\Subnautica
-%USERPROFILE%\AppData\LocalLow\Unknown Worlds\SubnauticaZero
+}
 ```
 
-The exact file names and paths may vary by version and installation. Check the latest `Player.log` or equivalent runtime log when diagnosing a crash.
+This removes the client-availability check that can cause startup errors when the expected Steam environment is unavailable.
+
+#### `TestIfAvailableGameServer`
+
+```csharp
+public static void TestIfAvailableGameServer()
+{
+
+}
+```
+
+This removes the game-server availability check that can stop the game when no compatible Steam connection is detected.
+
+---
+
+### `Assembly-CSharp.dll`
+
+#### `PlatformInitAsync` — Below Zero
+
+```csharp
+private IEnumerator PlatformInitAsync()
+{
+    Debug.Log("Crack: Forcing Null Platform Services...");
+    PlatformServicesNull nullServices = new PlatformServicesNull(PlatformServicesNull.DefaultSavePath);
+    yield return nullServices.InitializeAsync();
+    this.services = nullServices;
+    this._gamepadLightBar = new GamepadLightBar(this.services);
+    foreach (IOnQuitBehaviour behaviour in this.deferredRegisterQuitBehaviours)
+    {
+        PlatformUtils.RegisterOnQuitBehaviour(behaviour);
+    }
+    this.deferredRegisterQuitBehaviours.Clear();
+    yield break;
+}
+```
+
+This forces the engine to use the internal null-platform service implementation instead of the Steam-backed implementation.
+
+#### `PlatformInitAsync` — original placeholder
+
+```csharp
+private IEnumerator PlatformInitAsync()
+{
+    // No modification
+}
+```
+
+This represents the original initialization area that was reviewed during the analysis.
+
+---
+
+#### `GetPrimaryDevice` — Below Zero
+
+```csharp
+public static GameInput.Device GetPrimaryDevice()
+{
+    return GameInput.lastDevice;
+}
+```
+
+Returns the last known input device to avoid accessing an uninitialized input object.
+
+#### `GetPrimaryDevice` — Subnautica
+
+```csharp
+public static GameInput.Device get_PrimaryDevice()
+{
+    if (GameInput.input == null)
+    {
+        return GameInput.Device.Keyboard;
+    }
+    return GameInput.input.PrimaryDevice;
+}
+```
+
+Uses the keyboard as a fallback when the input object has not yet been initialized.
+
+---
+
+#### `IsPresent`
+
+```csharp
+public static bool IsPresent()
+{
+    RuntimePlatform platform = Application.platform;
+    if (platform == RuntimePlatform.OSXPlayer)
+    {
+        return Directory.Exists(string.Format("{0}/Plugins/steam_api.bundle", Application.dataPath));
+    }
+    if (platform == RuntimePlatform.WindowsPlayer)
+    {
+        return File.Exists(string.Format("{0}/Plugins/x86_64/steam_api64.dll", Application.dataPath));
+    }
+    Debug.LogWarningFormat("Unhandled platform {0} when checking for Steam library", new object[]
+    {
+        Application.platform
+    });
+    return false;
+}
+```
+
+Checks whether the expected Steam library exists for the current platform. This method is useful when investigating why the game selects or rejects a platform-service implementation.
+
+---
+
+#### `InitializeAsync` — Below Zero
+
+```csharp
+public IEnumerator InitializeAsync()
+{
+    yield break;
+}
+```
+
+Skips the Steam initialization coroutine when the Steam service is not available.
+
+#### `InitializeAsync` — Subnautica 1
+
+```csharp
+public IEnumerator InitializeAsync()
+{
+    string savePath = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "SNAppData/SavedGames");
+    this.userStoragePC = new UserStoragePC(savePath);
+    yield break;
+}
+```
+
+Creates a local user-storage object and redirects save handling to the `SNAppData/SavedGames` directory.
+
+> Always back up existing saves before testing alternate storage behavior.
+
+---
+
+#### `GetSupportsVirtualKeyboard`
+
+```csharp
+public bool GetSupportsVirtualKeyboard()
+{
+    return false;
+}
+```
+
+Reports that the Steam virtual keyboard is unavailable, avoiding calls to a service that may not exist in the current environment.
+
+---
+
+#### `IsBigPictureMode` — Below Zero
+
+```csharp
+protected static bool get_IsBigPictureMode()
+{
+    return false;
+}
+```
+
+Disables Big Picture mode detection when the related Steam functionality is unavailable.
+
+---
 
 ## Troubleshooting
 
@@ -110,45 +241,33 @@ The exact file names and paths may vary by version and installation. Check the l
 
 - Confirm that the assembly matches the installed game version.
 - Restore the original files and reproduce the issue without modifications.
-- Check the runtime log for platform initialization errors.
+- Check the latest `Player.log` for platform initialization errors.
 - Verify that required dependencies and redistributables are installed.
 
-### Input does not work
+### Input crashes or does not work
 
 - Check whether the primary device is initialized before it is accessed.
-- Test keyboard, controller, and mouse input independently.
+- Test keyboard and controller input separately.
 - Look for null-reference errors in the input-related log entries.
 
 ### Saves are missing
 
 - Check the effective local save directory.
-- Confirm that the game has permission to access the directory.
+- Confirm that the game has permission to read and write there.
 - Restore from a backup instead of overwriting existing saves.
 
-### Behavior changes after a game update
+### A game update breaks the changes
 
-This is expected for reverse-engineering notes. Re-check method signatures and control flow against the new assembly rather than applying an older change blindly.
+This is expected when working with reverse-engineering notes. Re-check the method signatures and control flow against the new assembly rather than applying an older change blindly.
+
+---
 
 ## Limitations
 
-- These notes are not guaranteed to work with every game release.
+- These notes are version-specific and may not work with every release.
 - No compiled binaries or modified game files are provided here.
-- The repository does not provide a license or permission to redistribute proprietary game code.
-- Platform behavior may differ across operating systems and storefront versions.
-
-## Contributing
-
-When adding a new observation, include:
-
-- Game name and exact version
-- Platform and architecture
-- Assembly name
-- Class and method name
-- Reproduction steps for the original issue
-- Relevant log excerpt
-- Expected and observed behavior
-
-Avoid committing proprietary binaries, personal save files, credentials, or copyrighted game assets.
+- The repository does not grant permission to redistribute proprietary game code or assets.
+- Platform behavior may differ between operating systems and storefront versions.
 
 ## Disclaimer
 
