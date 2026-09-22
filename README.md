@@ -1,167 +1,155 @@
-# Crack Subnautica 1 and Bellow Zero using dnSpy and x64dbg
+# Subnautica & Subnautica: Below Zero — Platform Integration Notes
 
-Using **x64dbg** attached to the game and using the file **Player.txt** in `AppData\LocalLow\Unknown Worlds\Subnautica` and `AppData\LocalLow\Unknown Worlds\SubnauticaZero` to view crash log.
+> **Educational and interoperability research only.**
+>
+> This repository documents observations about platform-service integration, startup behavior, and fallback code paths in Subnautica and Subnautica: Below Zero. It is not an official patch, crack, or redistribution of modified game files.
+>
+> Do not use this documentation to bypass licensing, DRM, or access controls. Use legitimate copies of the games and follow the applicable software licenses and terms of service.
 
----
-## Patch DLL `com.rlabrecque.steamworks.net.dll`
+## Overview
 
-Go to the Classe `InteropHelp` and clear `methodes`
-- **TestIfAvailableClient**
-- **TestIfAvailableGameServer**
+Subnautica and Subnautica: Below Zero use platform services for parts of their startup flow, input handling, save storage, and optional Steam features. When those services are unavailable or incorrectly initialized, the game may fail to start or produce null-reference and input-related errors.
 
----
-## Patch DLL `Assembly-CSharp.dll`
+This project collects technical notes about those interactions, with a focus on:
 
-Go to the Classe `PlatformUtils` and clear `methode`
-- **PlatformInitAsync**
+- Steamworks availability checks
+- Platform-service initialization
+- Input-device fallback behavior
+- Local save-storage behavior
+- Virtual keyboard support
+- Big Picture mode detection
 
-Go to the Classe `GameInput` and clear `methode` 
-- **GetPrimaryDevice**
+## Games covered
 
-Go to the Classe `PlatformServicesSteam` and clear `methodes`
-- **IsPresent**
-- **InitializeAsync**
-- **GetSupportVirtualKeyboard**
-and `property`
-- **IsBigPictureMode**
+- **Subnautica**
+- **Subnautica: Below Zero**
 
----
-### `com.rlabrecque.steamworks.net.dll`
+Always verify the exact game build before comparing method names, signatures, or behavior. Game updates can change assemblies and invalidate earlier observations.
 
-**TestIfAvailableClient :**
-```C#
-public static void TestIfAvailableClient()
-{
+## Assemblies discussed
 
-}
+The notes in this repository refer to the following assemblies:
+
+- `com.rlabrecque.steamworks.net.dll`
+- `Assembly-CSharp.dll`
+
+The relevant code is located in platform and input-related classes, including:
+
+- `InteropHelp`
+- `PlatformUtils`
+- `GameInput`
+- `PlatformServicesSteam`
+
+## Technical summary
+
+### Steamworks availability
+
+The Steamworks wrapper contains client and game-server availability checks. These methods determine whether the expected platform API is available and can affect startup behavior when the runtime environment is incomplete.
+
+Methods observed in the analysis include:
+
+- `TestIfAvailableClient`
+- `TestIfAvailableGameServer`
+
+### Platform initialization
+
+`PlatformInitAsync` is responsible for selecting and initializing the platform-service implementation used by the game. The initialization path is important because later systems may assume that a valid service object has already been created.
+
+When investigating startup failures, check:
+
+- Which platform implementation is selected
+- Whether initialization completes successfully
+- Whether the service object is null
+- Whether quit callbacks and input services are registered
+
+### Input-device selection
+
+`GameInput.GetPrimaryDevice` and related properties can fail when the input subsystem has not finished initializing. A safe fallback device or a null check may be necessary during debugging, depending on the game version.
+
+### Steam presence and optional features
+
+`PlatformServicesSteam` contains checks and features related to Steam, including:
+
+- `IsPresent`
+- `InitializeAsync`
+- `GetSupportsVirtualKeyboard`
+- `IsBigPictureMode`
+
+These methods should be treated as version-specific research targets rather than stable APIs. Their implementation and behavior may differ between Subnautica and Below Zero.
+
+### Save storage
+
+The game may use platform-backed storage or a local fallback path. When investigating save issues, check the effective save directory and confirm that the process has permission to read and write there.
+
+Do not delete or overwrite save data while testing. Make a backup first.
+
+## Recommended investigation workflow
+
+1. Record the exact game version and platform.
+2. Back up the original game files and save data.
+3. Capture the relevant log files before making changes.
+4. Compare the affected method with the matching assembly from the same game build.
+5. Change one behavior at a time in an isolated test environment.
+6. Verify startup, input, save loading, and quitting separately.
+7. Keep a record of the original and modified behavior.
+
+## Log locations
+
+The game logs can usually be found in locations similar to:
+
+```text
+%USERPROFILE%\AppData\LocalLow\Unknown Worlds\Subnautica
+%USERPROFILE%\AppData\LocalLow\Unknown Worlds\SubnauticaZero
 ```
-Clears the Steamworks API client verification to prevent launch errors when Steam is missing.
 
-**TestIfAvailableGameServer :**
-```C#
-public static void TestIfAvailableGameServer()
-{
+The exact file names and paths may vary by version and installation. Check the latest `Player.log` or equivalent runtime log when diagnosing a crash.
 
-}
-```
-Clears the Steamworks API server verification to prevent the game from stopping without a detected Steam connection.
+## Troubleshooting
 
----
-### `Assembly-CSharp.dll`
+### The game does not start
 
-**PlatformInitAsync (Bellow Zero) :**
-```C#
-private IEnumerator PlatformInitAsync()
-{
-	Debug.log("Crack: Forcing Null Platform Services...");
-	PlatformServicesNull nullServices = new PlatformServicesNull(PlatformServicesNUll.DefaultSavePath);
-	yield return nullServices.InitializeAsync();
-	this.services = nullServices;
-	this._gamepadLightBar = new GamepadLightBar(this.services);
-	foreach (IOnQuitBehaviour behaviour in this.deferredRegisterQuitBehaviours)
-	{
-		PlatformUtils.RegisterOnQuitBehaviour(behaviour);
-	}
-	this.deferredRegisterQuitBehaviours.Clear();
-	yield break;
-}
-```
-Forces the engine to use empty "Null" services, bypassing DRM checks and preventing auto-closure when Steam is not found.
+- Confirm that the assembly matches the installed game version.
+- Restore the original files and reproduce the issue without modifications.
+- Check the runtime log for platform initialization errors.
+- Verify that required dependencies and redistributables are installed.
 
-**PlatformInitAsync () :**
-```C#
-private IEnumerator PlatformInitAsync()
-{
-	//No modification
-}
-```
-Placeholder for the original initialization logic.
+### Input does not work
 
----
-**GetPrimaryDevice (Bellow Zero) :**
-```C#
-public static GameInput.Device GetPrimaryDevice()
-{
-	return GameInput.lastDevice;
-}
-```
-Returns a valid input device directly to prevent crashes from uninitialized input systems.
+- Check whether the primary device is initialized before it is accessed.
+- Test keyboard, controller, and mouse input independently.
+- Look for null-reference errors in the input-related log entries.
 
-**GetPrimaryDevice (Subnautica 1) :**
-```C#
-public static GameInput.Device get_PrimaryDevice()  
-{    
-	if (GameInput.input == null)
-	{
-		return GameInput.Device.Keyboard;
-	}
-	return GameInput.input.PrimaryDevice;  
-}
-```
-Prevents a NullReferenceException crash by defaulting to the keyboard if the Steam-dependent input object is missing.
+### Saves are missing
 
----
-**IsPresent :**
-```C#
-public static bool IsPresent()
-{        
-	RuntimePlatform platform = Application.platform;
-	if (platform == RuntimePlatform.OSXPlayer)
-	{
-		return Directory.Exists(string.Format("{0}/Plugins/steam_api.bundle", Application.dataPath));
-	}        
-	if (platform == RuntimePlatform.WindowsPlayer)
-	{
-		return File.Exists(string.Format("{0}/Plugins/x86_64/steam_api64.dll", Application.dataPath));
-	}
-	Debug.LogWarningFormat("Unhandled platform {0} when checking for Steam library", new object[]
-	{
-		Application.platform
-	});
-	return false;
-}
-```
-Tricks the game into thinking Steam is not installed, forcing it to use local fallback methods.
+- Check the effective local save directory.
+- Confirm that the game has permission to access the directory.
+- Restore from a backup instead of overwriting existing saves.
 
----
-**InitializeAsync (Bellow Zero) :**
-```C#
-public IEnumerator InitializeAsync()
-{
-	yield break;
-}
-```
-Skips the Steam initialization phase entirely to bypass license and DRM verification steps at startup.
+### Behavior changes after a game update
 
-**InitializeAsync (Subnautica 1) :**
-```C#
-public IEnumerator InitializeAsync()
-{
-	string savePath = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "SNAppData/SavedGames");
-	this.userStoragePC = new UserStoragePC(savePath);
-	yield break;
-}
-```
-Redirects save files to a local folder (SNAppData) since the Steam Cloud is unavailable.
+This is expected for reverse-engineering notes. Re-check method signatures and control flow against the new assembly rather than applying an older change blindly.
 
----
-**GetSupportVirtualKeyboard :**
-```C#
-public bool GetSupportsVirtualKeyboard()
-{
-	return false;
-}
-```
-Disables Steam's virtual keyboard to avoid unnecessary system calls that could cause errors.
+## Limitations
 
----
-**IsBigPictureMode (Bellow Zero) :**
-```C#
-protected static bool get_IsBigPictureMode()  
-{
-	return false;  
-}
-```
-Disables Big Picture mode detection to prevent the game from calling the missing Steam DLL.
+- These notes are not guaranteed to work with every game release.
+- No compiled binaries or modified game files are provided here.
+- The repository does not provide a license or permission to redistribute proprietary game code.
+- Platform behavior may differ across operating systems and storefront versions.
 
+## Contributing
 
+When adding a new observation, include:
+
+- Game name and exact version
+- Platform and architecture
+- Assembly name
+- Class and method name
+- Reproduction steps for the original issue
+- Relevant log excerpt
+- Expected and observed behavior
+
+Avoid committing proprietary binaries, personal save files, credentials, or copyrighted game assets.
+
+## Disclaimer
+
+This is an independent technical documentation project and is not affiliated with Unknown Worlds Entertainment, Valve, Steam, or the developers of Subnautica. Use the information responsibly and only with software you are authorized to inspect or modify.
