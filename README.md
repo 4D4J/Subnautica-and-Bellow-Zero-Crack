@@ -4,7 +4,9 @@
 
 ## Overview
 
-This project documents the use of **x64dbg** and **dnSpy** to investigate startup and crash behavior in Subnautica and Subnautica: Below Zero.
+This project documents the use of **x64dbg**, **dnSpy**, and [**NETexplorer**](https://github.com/4D4J/NETexplorer) to investigate startup and crash behavior in Subnautica and Subnautica: Below Zero.
+
+[NETexplorer](https://github.com/4D4J/NETexplorer) can be used in parallel with dnSpy to search for classes and methods across .NET assemblies. It is especially useful for quickly locating the methods listed in this README before inspecting their implementation in dnSpy. x64dbg can then be used separately for runtime debugging and crash investigation.
 
 The crash logs can be found in the following directories:
 
@@ -14,6 +16,35 @@ The crash logs can be found in the following directories:
 The main log file is generally named `Player.log`, although the exact files may vary depending on the game version.
 
 > **Important:** Make a backup of the original assemblies and save files before making any changes. Method names, signatures, and behavior may differ between game versions.
+
+---
+
+## Tools
+
+### dnSpy
+
+Use dnSpy to inspect .NET assemblies, browse namespaces and classes, and review the implementation of individual methods.
+
+### NETexplorer
+
+[**4D4J/NETexplorer**](https://github.com/4D4J/NETexplorer) is a C# command-line tool for searching classes and methods across .NET assemblies using wildcard or regular-expression patterns.
+
+It can be used alongside dnSpy to:
+
+- Find a class or method quickly across one or more assemblies
+- Search by exact names, wildcards, or regular expressions
+- Identify the relevant assembly before opening it in dnSpy
+- Reduce the time spent manually browsing large Unity assemblies
+
+Suggested workflow:
+
+1. Use NETexplorer to locate the class or method name.
+2. Open the matching assembly in dnSpy.
+3. Inspect the method implementation and its callers.
+4. Use x64dbg only when runtime behavior or a crash needs to be investigated.
+5. Record the game version and assembly version before comparing results.
+
+See the [NETexplorer repository](https://github.com/4D4J/NETexplorer) for installation and usage instructions.
 
 ---
 
